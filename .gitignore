@@ -29,8 +29,8 @@ Thumbs.db
 *.swo
 *~
 
-# Database / local data (optional - uncomment if you don't want to commit sample data)
-# backend/history_db.json
+# Database / local data - do not commit runtime user data
+backend/history_db.json
 
 # Temporary files
 *.tmp
