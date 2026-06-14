@@ -1,0 +1,434 @@
+const express = require('express');
+const cors = require('cors');
+const { GoogleGenAI } = require('@google/genai');
+const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
+const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Initialize the official Google Gen AI client
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// ==========================================
+// SECURITY LAYER SETUP (intact + smooth)
+// ==========================================
+app.use(helmet()); // Secure HTTP headers
+
+// Tightened CORS (adjust origins for your deployment)
+// Allow common Vite ports + any localhost port for dev (Vite auto-falls back to 5174/5175/etc when ports are busy)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:4173',
+  'http://localhost:5175',
+  process.env.FRONTEND_ORIGIN
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+    // Support any localhost or 127.0.0.1 port during development
+    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (isLocalhost || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS policy: Origin not allowed.'));
+    }
+  },
+  credentials: true
+}));
+
+app.use(express.json({ limit: '1mb' })); // Reasonable body size limit
+
+// Simple request logger (helps see if requests are reaching the backend)
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// JWT secret (required for real auth)
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-insecure-change-this-in-production';
+if (!process.env.JWT_SECRET) {
+  console.warn('⚠️  JWT_SECRET not set in .env — using dev fallback. Set a strong secret before production use.');
+}
+
+// Rate limiters for smooth but protected experience
+const optimizeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many optimization requests from this IP. Please try again later.' }
+});
+
+const historyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many history requests. Slow down a bit.' }
+});
+
+// Auth middleware: verifies JWT and attaches user
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication token required for this action.' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired authentication token.' });
+    }
+    req.user = { email: decoded.email };
+    next();
+  });
+}
+
+// ==========================================
+// DATABASE SETUP & FALLBACK MECHANISM
+// ==========================================
+const MONGODB_URI = process.env.MONGODB_URI;
+let dbConnected = false;
+
+if (MONGODB_URI && MONGODB_URI.trim() !== '') {
+    mongoose.connect(MONGODB_URI)
+        .then(() => {
+            console.log('Successfully connected to MongoDB Atlas cloud database.');
+            dbConnected = true;
+        })
+        .catch((err) => {
+            console.error('Failed to connect to MongoDB Atlas:', err.message);
+            console.log('Operating in LOCAL FALLBACK MODE (history_db.json).');
+        });
+} else {
+    console.log('No MONGODB_URI provided in .env. Operating in LOCAL FALLBACK MODE (history_db.json).');
+}
+
+// 1. Mongoose History Schema
+const HistorySchema = new mongoose.Schema({
+    email: { type: String, required: true },
+    query: { type: String, required: true },
+    resolution: { type: String, required: true },
+    data: { type: Object, required: true },
+    timestamp: { type: Date, default: Date.now }
+});
+
+const History = mongoose.model('History', HistorySchema);
+
+// 2. Local File Storage Database Helper (Fallback)
+const localDbPath = path.join(__dirname, 'history_db.json');
+
+function readLocalDb() {
+    try {
+        if (!fs.existsSync(localDbPath)) {
+            fs.writeFileSync(localDbPath, JSON.stringify([], null, 2));
+            return [];
+        }
+        const fileContent = fs.readFileSync(localDbPath, 'utf8');
+        return JSON.parse(fileContent || '[]');
+    } catch (error) {
+        console.error('Error reading local file database:', error.message);
+        return [];
+    }
+}
+
+function writeLocalDb(data) {
+    try {
+        fs.writeFileSync(localDbPath, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error('Error writing to local file database:', error.message);
+    }
+}
+
+// 3. Database operations with automatic fallback
+async function saveHistoryEntry({ email, query, resolution, data }) {
+    if (dbConnected) {
+        try {
+            const entry = new History({ email, query, resolution, data });
+            const saved = await entry.save();
+            return {
+                _id: saved._id.toString(),
+                email: saved.email,
+                query: saved.query,
+                resolution: saved.resolution,
+                data: saved.data,
+                timestamp: saved.timestamp
+            };
+        } catch (error) {
+            console.error('Mongoose save failed, falling back to local file storage:', error.message);
+        }
+    }
+    
+    // File fallback
+    const localDb = readLocalDb();
+    const newEntry = {
+        _id: 'local_' + Math.random().toString(36).substr(2, 9),
+        email,
+        query,
+        resolution,
+        data,
+        timestamp: new Date().toISOString()
+    };
+    localDb.unshift(newEntry);
+    writeLocalDb(localDb);
+    return newEntry;
+}
+
+async function getHistoryByEmail(email) {
+    if (dbConnected) {
+        try {
+            const records = await History.find({ email }).sort({ timestamp: -1 });
+            return records.map(r => ({
+                _id: r._id.toString(),
+                email: r.email,
+                query: r.query,
+                resolution: r.resolution,
+                data: r.data,
+                timestamp: r.timestamp
+            }));
+        } catch (error) {
+            console.error('Mongoose find failed, falling back to local file storage:', error.message);
+        }
+    }
+    
+    const localDb = readLocalDb();
+    return localDb.filter(r => r.email === email);
+}
+
+async function getHistoryById(id) {
+    // If it's a local mock ID or database connection is not established
+    if (dbConnected && !id.startsWith('local_')) {
+        try {
+            const record = await History.findById(id);
+            if (record) {
+                return {
+                    _id: record._id.toString(),
+                    email: record.email,
+                    query: record.query,
+                    resolution: record.resolution,
+                    data: record.data,
+                    timestamp: record.timestamp
+                };
+            }
+        } catch (error) {
+            console.error('Mongoose findById failed, checking local file storage:', error.message);
+        }
+    }
+    
+    const localDb = readLocalDb();
+    return localDb.find(r => r._id === id);
+}
+
+async function deleteHistoryEntry(id) {
+    if (dbConnected && !id.startsWith('local_')) {
+        try {
+            const result = await History.findByIdAndDelete(id);
+            if (result) return true;
+        } catch (error) {
+            console.error('Mongoose delete failed, trying local file storage:', error.message);
+        }
+    }
+    
+    const localDb = readLocalDb();
+    const filtered = localDb.filter(r => r._id !== id);
+    if (filtered.length !== localDb.length) {
+        writeLocalDb(filtered);
+        return true;
+    }
+    return false;
+}
+
+// ==========================================
+// SYSTEM PROMPT FOR AI ENGINE
+// ==========================================
+const systemInstruction = `
+You are a rapid-choice Multi-Variable Value Optimization Engine. Your job is to intercept a user's everyday consumer plan, instantly generate exactly 2 low-cost alternatives, and analyze their original path. 
+
+CORE RULES:
+1. Prioritize immediate, lower-cost consumer-friendly alternatives that maintain identical quality. 
+2. Lowering carbon emissions is a hidden metric—do not mention it in the title or text descriptions; only output it as a calculated bonus percentage.
+3. If the user's plan is already the most optimized, cheapest, and lowest-carbon method available, set 'isAlreadyOptimal' to true. In this case, provide a friendly celebration message and leave the smartAlternatives array completely empty.
+4. Keep all textual quality descriptions under 5 words for quick decision-making.
+
+You must return EXCLUSIVELY a valid, un-nested JSON object matching this exact schema structure:
+{
+  "isAlreadyOptimal": false,
+  "celebrationMessage": "A quick, validating 1-sentence applause for their efficiency choice.",
+  "efficiencyStats": {
+    "costRating": "Optimal Savings",
+    "carbonScore": "90% below average"
+  },
+  "userOriginalWay": {
+    "title": "Name of original plan",
+    "costINR": 500,
+    "qualityMetric": "3-5 word baseline assurance",
+    "softSuggestion": "A helpful optimization tip if they still choose this path."
+  },
+  "smartAlternatives": [
+    {
+      "badge": "Cheapest Choice",
+      "title": "Alternative Name",
+      "costINR": 250,
+      "carbonSavedPercent": 70,
+      "qualityAssurance": "3-5 words verifying experience",
+      "actionButtonText": "Short action label",
+      "actionLink": "https://example.com"
+    }
+  ]
+}
+`;
+
+// ==========================================
+// API ROUTES
+// ==========================================
+
+// Real lightweight auth endpoint (smooth experience: just email → real JWT)
+app.post('/api/auth/login', (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ error: 'A valid email address is required.' });
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  const token = jwt.sign({ email: normalizedEmail }, JWT_SECRET, { expiresIn: '7d' });
+  res.json({ token, email: normalizedEmail });
+});
+
+// 1. Optimize Sourcing & Save to History
+app.post('/api/optimize', optimizeLimiter, async (req, res) => {
+    try {
+        const { userPlan, email: bodyEmail } = req.body;
+
+        if (!userPlan || typeof userPlan !== 'string' || userPlan.trim().length < 3) {
+            return res.status(400).json({ error: 'User plan is required (min 3 characters).' });
+        }
+
+        // Resolve email securely: prefer valid JWT, fall back to body email (for legacy/guest)
+        let effectiveEmail = null;
+        const authHeader = req.headers['authorization'];
+        if (authHeader) {
+            const token = authHeader.split(' ')[1];
+            if (token) {
+                try {
+                    const decoded = jwt.verify(token, JWT_SECRET);
+                    effectiveEmail = decoded.email;
+                } catch (_) {
+                    // invalid token — treat as guest
+                }
+            }
+        }
+        if (!effectiveEmail && bodyEmail && typeof bodyEmail === 'string' && bodyEmail.includes('@')) {
+            effectiveEmail = bodyEmail.trim().toLowerCase();
+        }
+
+        // Generate response using Gemini AI
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: userPlan,
+            config: {
+                systemInstruction: systemInstruction,
+                responseMimeType: 'application/json'
+            }
+        });
+
+        const optimizationData = JSON.parse(response.text);
+        
+        let savedEntry = null;
+        if (effectiveEmail) {
+            const resolution = optimizationData.isAlreadyOptimal 
+                ? 'Verified Already Optimal' 
+                : `Swapped to ${optimizationData.smartAlternatives?.[0]?.title || 'Alternative'}`;
+            
+            savedEntry = await saveHistoryEntry({
+                email: effectiveEmail,
+                query: userPlan,
+                resolution,
+                data: optimizationData
+            });
+        }
+
+        res.json({
+            optimization: optimizationData,
+            historyEntry: savedEntry
+        });
+
+    } catch (error) {
+        console.error('Gemini Backend Error:', error);
+        res.status(500).json({ error: error.message || 'Failed to process optimization.' });
+    }
+});
+
+// 2. Fetch User History (protected: must be authenticated owner)
+app.get('/api/history', historyLimiter, authenticateToken, async (req, res) => {
+    try {
+        // Always use the email from the verified token — never trust client query param
+        const historyList = await getHistoryByEmail(req.user.email);
+        res.json(historyList);
+    } catch (error) {
+        console.error('Fetch History Error:', error);
+        res.status(500).json({ error: 'Failed to retrieve history.' });
+    }
+});
+
+// 3. Fetch Single Shared History Item (Public Link)
+app.get('/api/history/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const entry = await getHistoryById(id);
+        
+        if (!entry) {
+            return res.status(404).json({ error: 'Shared swap optimization not found.' });
+        }
+        
+        res.json(entry);
+    } catch (error) {
+        console.error('Fetch Shared Item Error:', error);
+        res.status(500).json({ error: 'Failed to retrieve shared swap details.' });
+    }
+});
+
+// 4. Delete History Item (protected + ownership enforced)
+app.delete('/api/history/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Ownership verification: only owner (from JWT) can delete
+        const entry = await getHistoryById(id);
+        if (!entry) {
+            return res.status(404).json({ error: 'History item not found.' });
+        }
+        if (entry.email !== req.user.email) {
+            return res.status(403).json({ error: 'Not authorized to delete this history item.' });
+        }
+
+        const success = await deleteHistoryEntry(id);
+        
+        if (!success) {
+            return res.status(404).json({ error: 'History item not found or could not be deleted.' });
+        }
+        
+        res.json({ success: true, message: 'History item successfully deleted.' });
+    } catch (error) {
+        console.error('Delete History Error:', error);
+        res.status(500).json({ error: 'Failed to delete history item.' });
+    }
+});
+
+// Fallback for unknown routes - always return JSON so the frontend doesn't choke on HTML
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found on backend' });
+});
+
+app.listen(PORT, () => {
+    console.log(`SmartSwap Backend operating seamlessly on port ${PORT}`);
+});
