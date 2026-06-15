@@ -141,6 +141,7 @@ function DashboardPage({ auth }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [offlineNotice, setOfflineNotice] = useState('');
   const [activeHistoryIndex, setActiveHistoryIndex] = useState(null);
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -187,6 +188,7 @@ function DashboardPage({ auth }) {
 
     setLoading(true);
     setError('');
+    setOfflineNotice('');
     setResult(null);
     setActiveHistoryIndex(null);
 
@@ -201,7 +203,20 @@ function DashboardPage({ auth }) {
       });
       if (!response.ok) {
         const txt = await response.text().catch(() => '');
-        throw new Error('Engine synchronization dropped. ' + txt.substring(0, 100));
+        let message = 'The AI engine is temporarily busy. Please try again in a few seconds.';
+        try {
+          const parsed = JSON.parse(txt);
+          if (parsed?.error) {
+            message = typeof parsed.error === 'string'
+              ? parsed.error
+              : (parsed.error.message || 'The AI engine is temporarily busy. Please try again shortly.');
+          }
+        } catch {
+          if (/high demand|503|UNAVAILABLE/i.test(txt)) {
+            message = 'The AI engine is experiencing high demand. Please try again shortly.';
+          }
+        }
+        throw new Error(message);
       }
       const contentType = response.headers.get('content-type') || '';
       const resData = contentType.includes('application/json')
@@ -209,6 +224,9 @@ function DashboardPage({ auth }) {
         : await response.text().then(t => { throw new Error('Optimize returned non-JSON: ' + t.substring(0,100)); });
 
       setResult(resData.optimization);
+      if (resData.offlineFallback) {
+        setOfflineNotice('Demo mode: your site is working correctly. Live AI is paused (Gemini quota used up), so these are estimated alternatives.');
+      }
 
       if (resData.historyEntry) {
         setHistory(prev => [resData.historyEntry, ...prev]);
@@ -335,6 +353,12 @@ function DashboardPage({ auth }) {
               </button>
             </div>
           </form>
+          {offlineNotice && (
+            <div style={{ color: '#92400e', marginTop: '12px', fontSize: '14px', background: '#fffbeb', padding: '12px 14px', borderRadius: '8px', border: '1px solid #fde68a' }}>
+              <strong style={{ display: 'block', marginBottom: '4px' }}>✓ Site is working — demo mode active</strong>
+              {offlineNotice}
+            </div>
+          )}
           {error && <p style={{ color: '#dc2626', marginTop: '12px', fontSize: '14px' }}>⚠️ {error}</p>}
         </section>
 

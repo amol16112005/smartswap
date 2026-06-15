@@ -289,6 +289,172 @@ You must return EXCLUSIVELY a valid, un-nested JSON object matching this exact s
 }
 `;
 
+// Lighter models first — they tend to have more capacity during demand spikes
+const GEMINI_MODELS = (process.env.GEMINI_MODEL
+    ? [process.env.GEMINI_MODEL]
+    : [
+        'gemini-2.0-flash-lite',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash-8b',
+        'gemini-1.5-flash',
+        'gemini-2.5-flash'
+    ]);
+
+function isRetryableGeminiError(error) {
+    if (!error) return false;
+    if (error.status === 503 || error.status === 429) return true;
+    const msg = String(error.message || '');
+    return /high demand|503|429|UNAVAILABLE|overloaded|rate limit|resource exhausted|quota exceeded/i.test(msg);
+}
+
+function isModelSkipError(error) {
+    if (!error) return false;
+    if (error.status === 404) return true;
+    const msg = String(error.message || '');
+    return /not found|does not exist|invalid model|model.*not.*support/i.test(msg);
+}
+
+function isFatalGeminiError(error) {
+    if (!error) return false;
+    if (isRetryableGeminiError(error)) return false;
+    if (error.status === 401 || error.status === 403) return true;
+    const msg = String(error.message || '');
+    return /API_KEY_INVALID|invalid api key|permission denied/i.test(msg);
+}
+
+function isQuotaExhaustedError(error) {
+    const msg = String(error.message || '');
+    return /quota exceeded|limit:\s*0/i.test(msg);
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function buildOfflineFallback(userPlan) {
+    const lower = userPlan.toLowerCase();
+    let originalCost = 5000;
+    let altCost = 3200;
+    let originalTitle = 'Your original plan';
+    let altTitle = 'Lower-cost alternative';
+    let alt2Title = 'Second-hand / local swap';
+
+    if (/trip|travel|flight|train|bus|mumbai|delhi|goa|bangalore/i.test(lower)) {
+        originalCost = 4200;
+        altCost = 2100;
+        originalTitle = 'Direct peak-time booking';
+        altTitle = 'Off-peak train / bus';
+        alt2Title = 'Carpool or shared ride';
+    } else if (/phone|laptop|tablet|gadget|amazon|flipkart|buy|order/i.test(lower)) {
+        originalCost = 28000;
+        altCost = 19500;
+        originalTitle = 'Brand-new retail purchase';
+        altTitle = 'Certified refurbished unit';
+        alt2Title = 'Exchange + refurbished deal';
+    } else if (/food|grocery|swiggy|zomato|restaurant/i.test(lower)) {
+        originalCost = 650;
+        altCost = 380;
+        originalTitle = 'Delivery from premium outlet';
+        altTitle = 'Pickup from local store';
+        alt2Title = 'Meal prep at home';
+    }
+
+    return {
+        isAlreadyOptimal: false,
+        celebrationMessage: '',
+        efficiencyStats: {
+            costRating: 'Estimated Savings',
+            carbonScore: '35% below average'
+        },
+        userOriginalWay: {
+            title: originalTitle,
+            costINR: originalCost,
+            qualityMetric: 'Familiar convenient option',
+            softSuggestion: 'Compare 2–3 sellers before you commit.'
+        },
+        smartAlternatives: [
+            {
+                badge: 'Cheapest Choice',
+                title: altTitle,
+                costINR: altCost,
+                carbonSavedPercent: 42,
+                qualityAssurance: 'Same outcome less spend',
+                actionButtonText: 'Explore option',
+                actionLink: `https://www.google.com/search?q=${encodeURIComponent(userPlan)}`
+            },
+            {
+                badge: 'Eco Bonus',
+                title: alt2Title,
+                costINR: Math.round(altCost * 0.72),
+                carbonSavedPercent: 68,
+                qualityAssurance: 'Lower footprint same need',
+                actionButtonText: 'Browse listings',
+                actionLink: 'https://www.olx.in'
+            }
+        ]
+    };
+}
+
+async function generateOptimization(userPlan) {
+    const maxRetriesPerModel = 4;
+    const baseDelayMs = 2000;
+    let lastError = null;
+
+    for (const model of GEMINI_MODELS) {
+        for (let attempt = 0; attempt < maxRetriesPerModel; attempt++) {
+            try {
+                const response = await ai.models.generateContent({
+                    model,
+                    contents: userPlan,
+                    config: {
+                        systemInstruction: systemInstruction,
+                        responseMimeType: 'application/json'
+                    }
+                });
+                if (model !== GEMINI_MODELS[0]) {
+                    console.log(`Gemini fallback succeeded with model: ${model}`);
+                }
+                return { text: response.text, offlineFallback: false };
+            } catch (error) {
+                lastError = error;
+                if (isQuotaExhaustedError(error)) {
+                    console.warn('Gemini API quota exhausted — using offline fallback.');
+                    return {
+                        text: JSON.stringify(buildOfflineFallback(userPlan)),
+                        offlineFallback: true
+                    };
+                }
+                if (isFatalGeminiError(error)) {
+                    throw error;
+                }
+                if (isModelSkipError(error)) {
+                    console.warn(`Gemini model ${model} unavailable, trying next model...`);
+                    break;
+                }
+                if (!isRetryableGeminiError(error)) {
+                    console.warn(`Gemini ${model} non-retryable error, trying next model...`);
+                    break;
+                }
+                const delay = baseDelayMs * Math.pow(2, attempt);
+                console.warn(
+                    `Gemini ${model} attempt ${attempt + 1}/${maxRetriesPerModel} failed. ` +
+                    `Retrying in ${delay}ms...`
+                );
+                if (attempt < maxRetriesPerModel - 1) {
+                    await sleep(delay);
+                }
+            }
+        }
+        console.warn(`Gemini ${model} exhausted retries, trying next model...`);
+    }
+
+    console.warn('All Gemini models busy — serving offline fallback response.');
+    return {
+        text: JSON.stringify(buildOfflineFallback(userPlan)),
+        offlineFallback: true
+    };
+}
+
 // ==========================================
 // API ROUTES
 // ==========================================
@@ -331,16 +497,7 @@ app.post('/api/optimize', optimizeLimiter, async (req, res) => {
             effectiveEmail = bodyEmail.trim().toLowerCase();
         }
 
-        // Generate response using Gemini AI
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: userPlan,
-            config: {
-                systemInstruction: systemInstruction,
-                responseMimeType: 'application/json'
-            }
-        });
-
+        const response = await generateOptimization(userPlan);
         const optimizationData = JSON.parse(response.text);
         
         let savedEntry = null;
@@ -359,12 +516,18 @@ app.post('/api/optimize', optimizeLimiter, async (req, res) => {
 
         res.json({
             optimization: optimizationData,
-            historyEntry: savedEntry
+            historyEntry: savedEntry,
+            offlineFallback: response.offlineFallback
         });
 
     } catch (error) {
         console.error('Gemini Backend Error:', error);
-        res.status(500).json({ error: error.message || 'Failed to process optimization.' });
+        const isBusy = isRetryableGeminiError(error) || error.status === 503;
+        const status = isBusy ? 503 : 500;
+        const message = isBusy
+            ? 'The AI engine is temporarily busy. Please wait a few seconds and try again.'
+            : (error.message || 'Failed to process optimization.');
+        res.status(status).json({ error: message });
     }
 });
 
