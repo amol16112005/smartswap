@@ -12,8 +12,14 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Initialize the official Google Gen AI client
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize the official Google Gen AI client (re-read key on each call via getter)
+function getGeminiClient() {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || !apiKey.trim()) {
+        throw new Error('GEMINI_API_KEY is missing from .env');
+    }
+    return new GoogleGenAI({ apiKey: apiKey.trim() });
+}
 
 // ==========================================
 // SECURITY LAYER SETUP (intact + smooth)
@@ -289,28 +295,31 @@ You must return EXCLUSIVELY a valid, un-nested JSON object matching this exact s
 }
 `;
 
-// Lighter models first — they tend to have more capacity during demand spikes
+// Prefer models that still have free-tier quota; older 2.0 models often show limit: 0
 const GEMINI_MODELS = (process.env.GEMINI_MODEL
     ? [process.env.GEMINI_MODEL]
     : [
-        'gemini-2.0-flash-lite',
+        'gemini-2.5-flash',
         'gemini-2.0-flash',
-        'gemini-1.5-flash-8b',
-        'gemini-1.5-flash',
-        'gemini-2.5-flash'
+        'gemini-2.0-flash-lite'
     ]);
+
+function geminiErrorMessage(error) {
+    return String(error?.message || '');
+}
 
 function isRetryableGeminiError(error) {
     if (!error) return false;
-    if (error.status === 503 || error.status === 429) return true;
-    const msg = String(error.message || '');
-    return /high demand|503|429|UNAVAILABLE|overloaded|rate limit|resource exhausted|quota exceeded/i.test(msg);
+    // Never retry quota/auth failures — only transient overload (503)
+    if (error.status === 503) return true;
+    const msg = geminiErrorMessage(error);
+    return /high demand|503|UNAVAILABLE|overloaded/i.test(msg);
 }
 
 function isModelSkipError(error) {
     if (!error) return false;
     if (error.status === 404) return true;
-    const msg = String(error.message || '');
+    const msg = geminiErrorMessage(error);
     return /not found|does not exist|invalid model|model.*not.*support/i.test(msg);
 }
 
@@ -318,13 +327,15 @@ function isFatalGeminiError(error) {
     if (!error) return false;
     if (isRetryableGeminiError(error)) return false;
     if (error.status === 401 || error.status === 403) return true;
-    const msg = String(error.message || '');
+    const msg = geminiErrorMessage(error);
     return /API_KEY_INVALID|invalid api key|permission denied/i.test(msg);
 }
 
-function isQuotaExhaustedError(error) {
-    const msg = String(error.message || '');
-    return /quota exceeded|limit:\s*0/i.test(msg);
+function isPerModelQuotaError(error) {
+    if (!error) return false;
+    if (error.status === 429) return true;
+    const msg = geminiErrorMessage(error);
+    return /quota exceeded|resource exhausted|rate limit/i.test(msg);
 }
 
 function sleep(ms) {
@@ -396,9 +407,10 @@ function buildOfflineFallback(userPlan) {
 }
 
 async function generateOptimization(userPlan) {
-    const maxRetriesPerModel = 4;
-    const baseDelayMs = 2000;
+    const maxRetriesPerModel = 2;
+    const baseDelayMs = 1500;
     let lastError = null;
+    const ai = getGeminiClient();
 
     for (const model of GEMINI_MODELS) {
         for (let attempt = 0; attempt < maxRetriesPerModel; attempt++) {
@@ -414,21 +426,14 @@ async function generateOptimization(userPlan) {
                 if (model !== GEMINI_MODELS[0]) {
                     console.log(`Gemini fallback succeeded with model: ${model}`);
                 }
-                return { text: response.text, offlineFallback: false };
+                return { text: response.text, offlineFallback: false, fallbackReason: null };
             } catch (error) {
                 lastError = error;
-                if (isQuotaExhaustedError(error)) {
-                    console.warn('Gemini API quota exhausted — using offline fallback.');
-                    return {
-                        text: JSON.stringify(buildOfflineFallback(userPlan)),
-                        offlineFallback: true
-                    };
-                }
                 if (isFatalGeminiError(error)) {
                     throw error;
                 }
-                if (isModelSkipError(error)) {
-                    console.warn(`Gemini model ${model} unavailable, trying next model...`);
+                if (isModelSkipError(error) || isPerModelQuotaError(error)) {
+                    console.warn(`Gemini model ${model} unavailable for this key, trying next model...`);
                     break;
                 }
                 if (!isRetryableGeminiError(error)) {
@@ -437,7 +442,7 @@ async function generateOptimization(userPlan) {
                 }
                 const delay = baseDelayMs * Math.pow(2, attempt);
                 console.warn(
-                    `Gemini ${model} attempt ${attempt + 1}/${maxRetriesPerModel} failed. ` +
+                    `Gemini ${model} temporarily busy (attempt ${attempt + 1}/${maxRetriesPerModel}). ` +
                     `Retrying in ${delay}ms...`
                 );
                 if (attempt < maxRetriesPerModel - 1) {
@@ -445,13 +450,16 @@ async function generateOptimization(userPlan) {
                 }
             }
         }
-        console.warn(`Gemini ${model} exhausted retries, trying next model...`);
     }
 
-    console.warn('All Gemini models busy — serving offline fallback response.');
+    const reason = isPerModelQuotaError(lastError)
+        ? 'All configured Gemini models returned quota or rate-limit errors for this API key.'
+        : 'All configured Gemini models were temporarily unavailable.';
+    console.warn(`${reason} Serving offline fallback response.`);
     return {
         text: JSON.stringify(buildOfflineFallback(userPlan)),
-        offlineFallback: true
+        offlineFallback: true,
+        fallbackReason: reason
     };
 }
 
@@ -517,7 +525,8 @@ app.post('/api/optimize', optimizeLimiter, async (req, res) => {
         res.json({
             optimization: optimizationData,
             historyEntry: savedEntry,
-            offlineFallback: response.offlineFallback
+            offlineFallback: response.offlineFallback,
+            fallbackReason: response.fallbackReason || null
         });
 
     } catch (error) {
@@ -593,5 +602,8 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
+    const key = process.env.GEMINI_API_KEY || '';
+    const keyHint = key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '(missing)';
     console.log(`SmartSwap Backend operating seamlessly on port ${PORT}`);
-});
+    console.log(`Gemini API key loaded: ${keyHint} | models: ${GEMINI_MODELS.join(', ')}`);
+});

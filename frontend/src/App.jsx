@@ -225,7 +225,11 @@ function DashboardPage({ auth }) {
 
       setResult(resData.optimization);
       if (resData.offlineFallback) {
-        setOfflineNotice('Demo mode: your site is working correctly. Live AI is paused (Gemini quota used up), so these are estimated alternatives.');
+        setOfflineNotice(
+          resData.fallbackReason
+            ? `Live AI unavailable: ${resData.fallbackReason} Showing estimated alternatives instead.`
+            : 'Live AI is temporarily unavailable. Showing estimated alternatives instead.'
+        );
       }
 
       if (resData.historyEntry) {
@@ -575,20 +579,19 @@ function SharedSwapPage() {
 // ==========================================
 export default function App() {
   // auth = { email, token } | null   — real secure session
-  const [auth, setAuth] = useState(null);
-
-  // Restore session from localStorage on load (smooth experience)
-  useEffect(() => {
+  // Lazy initializer reads localStorage once on mount (avoids setState-in-effect warning)
+  const [auth, setAuth] = useState(() => {
     try {
       const saved = localStorage.getItem('smartswap_auth');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.email && parsed.token) {
-          setAuth(parsed);
-        }
+        if (parsed && parsed.email && parsed.token) return parsed;
       }
-    } catch (_) {}
-  }, []);
+    } catch {
+      // ignore malformed data
+    }
+    return null;
+  });
 
   // Persist auth changes
   useEffect(() => {
