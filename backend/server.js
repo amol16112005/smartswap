@@ -123,7 +123,10 @@ const MONGODB_URI = process.env.MONGODB_URI;
 let dbConnected = false;
 
 if (MONGODB_URI && MONGODB_URI.trim() !== '') {
-    mongoose.connect(MONGODB_URI)
+    mongoose.connect(MONGODB_URI.trim(), {
+        serverSelectionTimeoutMS: 10000,
+        family: 4
+    })
         .then(() => {
             console.log('Successfully connected to MongoDB Atlas cloud database.');
             dbConnected = true;
