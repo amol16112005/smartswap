@@ -4,90 +4,70 @@
 
 The goal is simple but powerful: help people make better decisions *before* they spend money, instead of tracking damage afterward.
 
+**Live demo:** [https://smartswap-8yvv.onrender.com](https://smartswap-8yvv.onrender.com)
+
 ---
 
 ## What Makes This Project Special
 
-SmartSwap is more than a typical "carbon calculator". It is a **full-stack AI application** with several deliberate architectural choices that make it educational, robust, and production-like:
+SmartSwap is more than a typical "carbon calculator". It is a **full-stack AI application** with deliberate architectural choices that make it educational, robust, and production-ready:
 
 ### 1. AI with Strict Structured Output
-- Powered by **Google Gemini 2.5 Flash**
-- Uses a highly engineered system prompt that forces the model to return **exact JSON** matching a defined schema
-- The AI is instructed **not to mention carbon** in the user-facing text — it only surfaces as a hidden "carbonSavedPercent" metric (a "bonus" the user discovers)
-- If the user's original plan is already optimal, the AI returns `isAlreadyOptimal: true` and an empty alternatives array
+- Powered by **Google Gemini** (2.5 Flash, with model fallbacks)
+- Highly engineered system prompt forces **exact JSON** matching a defined schema
+- Carbon impact surfaces as a hidden `carbonSavedPercent` metric — not preachy user-facing text
+- Offline fallback when the API is unavailable or quota is exhausted
+- Returns `isAlreadyOptimal: true` when the user's plan is already the best option
 
-This pattern (constrained generation + hidden metrics) is a common real-world technique when building AI products that must feel human and non-preachy.
-
-### 2. Real (but Smooth) Authentication Layer
-One of the most important recent additions is a **proper security layer** while preserving a frictionless user experience:
-
-- Users log in with **just an email** — no password required
-- The backend issues a real **JWT token** (7-day expiry)
-- All sensitive operations are protected:
-  - History listing only returns data belonging to the token's email
-  - Deleting a history item requires both a valid token **and** ownership verification
-- Public share links (`/share/:id`) remain accessible without authentication
-- Tokens are stored in `localStorage` and sent via `Authorization: Bearer` headers
-
-This demonstrates modern token-based auth, protected routes, and ownership checks in a full-stack context — without the usual login friction.
+### 2. Real (but Smooth) Authentication
+- Login with **just an email** — no password friction
+- Backend issues a real **JWT** (7-day expiry)
+- Protected history list and delete operations with ownership checks
+- Public share links (`/share/:id`) work without authentication
+- Tokens stored in `localStorage`, sent via `Authorization: Bearer` headers
 
 ### 3. Resilient Database Strategy
-- Supports **MongoDB Atlas** via Mongoose when `MONGODB_URI` is provided
-- Automatically falls back to a local `history_db.json` file if no database is configured or if the connection fails
-- The same data models and API surface work in both modes
-- This makes the project extremely easy to run locally while still being cloud-ready
+- **MongoDB Atlas** via Mongoose when `MONGODB_URI` is set
+- Automatic fallback to `history_db.json` if MongoDB is missing or unreachable
+- Same API surface in both modes
 
 ### 4. Security & Production Hardening
-The backend includes several production-grade practices:
+- **Helmet.js** — security HTTP headers
+- **express-rate-limit** — protects AI and history endpoints
+- **compression** — gzip responses in production
+- **CORS** — localhost dev ports, same-origin Render deploys, optional `FRONTEND_ORIGIN`
+- Production env validation for `JWT_SECRET` and `GEMINI_API_KEY`
+- Input validation, JSON body limits, request logging
 
-- **Helmet.js** – sets important security HTTP headers
-- **express-rate-limit** – protects expensive AI calls and data endpoints
-- **Tightened CORS** – allows common localhost ports + configurable production origin
-- **Request logging middleware** – every API call is logged with timestamp and method
-- **Input validation** + body size limits
-- **Defensive client-side parsing** – the frontend checks `Content-Type` before calling `.json()` and provides clear error messages if the backend returns HTML or text
-
-### 5. Public Sharing + Private Data Model
-This is a nice architectural pattern:
-- Every analysis can be turned into a shareable link
-- The `/share/:id` route is intentionally public (no auth required)
-- The personal dashboard and mutations (save, delete, list) are fully protected and filtered by the authenticated user
-- Demonstrates the common real-world pattern of "public read for sharing, private write for owners"
+### 5. Public Sharing + Private Data
+- Every analysis can become a shareable link
+- `/share/:id` is intentionally public
+- Dashboard, list, and delete are JWT-protected and user-scoped
 
 ### 6. Modern Full-Stack Practices
-- **Frontend**: React 19 + Vite + React Router 7. Clean component-based structure with no heavy CSS framework (inline styles for speed).
-- **Backend**: Express 5 + structured AI calls + JWT + graceful degradation.
-- **Client-server contract**: Strict JSON shapes on both sides. The frontend has defensive parsing so the app degrades gracefully if something goes wrong on the backend.
-- **SPA + API separation**: The frontend is a pure client application. The backend only serves JSON APIs (no server-side rendering).
+- **Modular React frontend** — lazy-loaded routes, reusable components
+- **Extracted backend libs** — CORS and offline fallback logic in `backend/lib/`
+- **Same-origin production deploy** — Docker image serves built frontend + API from one service
+- **41 automated tests** — API, unit, component, and axe accessibility audits
+- **GitHub Actions CI** — tests, lint, and build on every push to `main`
 
-### 7. Developer Experience & Observability
-- Easy to run without any external services (just a Gemini API key)
-- Real-time request logs appear while developing
-- Clear separation between public share experience and authenticated personal workspace
-- History sidebar allows instant re-opening of previous analyses
+### 7. Accessibility
+- Skip link, semantic landmarks, labelled forms
+- `aria-live` regions for errors and loading states
+- Keyboard-accessible history controls
+- Automated axe-core checks in the test suite
 
 ---
 
 ## Tech Stack
 
-### Frontend (`frontend/`)
-- React 19 + Vite
-- React Router 7
-- Lucide React (icons)
-- Pure JavaScript + inline CSS (deliberately lightweight)
-
-### Backend (`backend/`)
-- Node.js + Express 5
-- `@google/genai` (Gemini 2.5 Flash)
-- Mongoose (optional MongoDB)
-- `jsonwebtoken` (real JWT auth)
-- `helmet`, `express-rate-limit`, `cors`
-- dotenv + local JSON fallback
-
-### AI Layer
-- Gemini 2.5 Flash with a very strict system instruction
-- Forced JSON mode (`responseMimeType: 'application/json'`)
-- Carefully designed output schema
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | React 19, Vite 8, React Router 7, Lucide React, Vitest, Testing Library, vitest-axe |
+| **Backend** | Node.js 20, Express 5, `@google/genai`, Mongoose, JWT, Helmet, compression |
+| **Database** | MongoDB Atlas (optional) + `history_db.json` fallback |
+| **Deploy** | Docker, Render (Blueprint + auto-deploy), GitHub Actions CI |
+| **AI** | Gemini with strict JSON mode + offline fallback engine |
 
 ---
 
@@ -95,126 +75,187 @@ This is a nice architectural pattern:
 
 ```
 smartswap/
+├── .github/workflows/ci.yml   # GitHub Actions: test, lint, build
 ├── backend/
-│   ├── server.js              # Main Express app (AI, auth, routes, DB logic)
+│   ├── lib/
+│   │   ├── cors.js            # CORS origin policy (unit-tested)
+│   │   └── offlineFallback.js # Demo-mode AI fallback (unit-tested)
+│   ├── tests/
+│   │   ├── api.test.js        # API integration tests (supertest)
+│   │   ├── cors.test.js
+│   │   └── offlineFallback.test.js
+│   ├── server.js              # Express app entry point
 │   ├── history_db.json        # Local fallback database
-│   ├── package.json
 │   └── .env.example
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx            # Single-file React app (Landing, Login, Dashboard, Share)
-│   │   └── ...
+│   │   ├── components/
+│   │   │   ├── LandingPage.jsx
+│   │   │   ├── LoginPage.jsx
+│   │   │   ├── DashboardPage.jsx
+│   │   │   ├── SharedSwapPage.jsx
+│   │   │   ├── Navbar.jsx
+│   │   │   └── OptimizationResult.jsx
+│   │   ├── hooks/
+│   │   │   └── useDocumentTitle.js
+│   │   ├── App.jsx            # Router shell + lazy-loaded pages
+│   │   └── config.js          # API URL helper (same-origin aware)
 │   ├── package.json
 │   └── vite.config.js
 │
-├── ARCHITECTURE.md            # Deep architecture + specialties diagram
-├── CONTRIBUTING.md            # Contribution guidelines
-├── README.md                  # You are here
-└── SETUP.md (see checklist in this file)
+├── Dockerfile                 # Multi-stage: build frontend → serve from backend
+├── render.yaml                # Render Blueprint (Docker, auto-deploy)
+├── Procfile
+├── package.json               # Root scripts: test, build, start
+│
+├── ARCHITECTURE.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── SETUP.md
+└── README.md
 ```
 
 ---
 
-## Environment Setup Checklist
+## Quick Start (Local)
 
 ### Prerequisites
-- [ ] Node.js 18+ installed
-- [ ] npm (comes with Node)
-- [ ] A Google Gemini API key (free tier works)
-- [ ] (Optional) MongoDB Atlas account for cloud database
+- Node.js **18+** (20 recommended)
+- npm
+- Google Gemini API key — [get one here](https://aistudio.google.com/app/apikey)
+- (Optional) MongoDB Atlas connection string
 
-### Backend Setup
-1. `cd smartswap/backend`
-2. `cp .env.example .env` (or copy manually)
-3. Edit `.env` and add:
-   ```
-   GEMINI_API_KEY=your_actual_key_here
-   # JWT_SECRET=optional_strong_secret_for_production
-   # MONGODB_URI=optional_mongodb_connection_string
-   ```
-4. `npm install`
-5. `npm start` or `node server.js`
-6. You should see: `SmartSwap Backend operating seamlessly on port 5000`
+### 1. Backend
 
-### Frontend Setup
-1. `cd smartswap/frontend`
-2. `npm install`
-3. `npm run dev`
-4. Open the URL shown (usually http://localhost:5173 or 5174 etc.)
+```bash
+cd backend
+cp .env.example .env    # Windows: Copy-Item .env.example .env
+# Edit .env — add GEMINI_API_KEY at minimum
+npm install
+npm start
+```
 
-### Verification Steps
-- [ ] Backend starts without errors
-- [ ] Frontend loads at localhost port shown
-- [ ] You can log in with any email
-- [ ] Submitting a plan returns AI suggestions
-- [ ] History is saved and visible in sidebar
-- [ ] Request logs appear in backend console when using the app
+Expected output: `SmartSwap Backend operating seamlessly on port 5000`
 
-### Common Issues
-- **Port already in use**: Kill old node processes or let Vite use the next port.
-- **"Unexpected token '<'" error**: Usually means an old/stale process is running on port 5000 instead of the real backend.
-- **CORS errors**: Use the latest version of the code (CORS is now flexible for localhost ports).
-- **AI not working**: Double-check your `GEMINI_API_KEY` in `.env`.
+### 2. Frontend (new terminal)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the URL shown (usually `http://localhost:5173`). Vite proxies `/api` to port 5000.
+
+### 3. Run tests
+
+From the project root:
+
+```bash
+npm test                  # All 41 tests (backend + frontend)
+npm run test:backend      # 25 backend tests only
+npm run test:frontend     # 16 frontend tests only
+npm run test:ci           # Tests + production frontend build
+```
+
+---
+
+## Deploy to Render
+
+The app is configured for **Docker-based deployment** on Render via `render.yaml`.
+
+1. Connect the GitHub repo: `https://github.com/amol16112005/smartswap`
+2. Render detects `render.yaml` and creates a Docker web service
+3. Set these environment variables in the Render dashboard:
+   - `GEMINI_API_KEY` — required
+   - `JWT_SECRET` — required in production (Blueprint can auto-generate)
+   - `MONGODB_URI` — optional (uses file fallback if omitted)
+4. Push to `main` — auto-deploy triggers on each commit
+
+Health check: `GET /api/health` → `{ "status": "ok", "frontend": "built" }`
+
+**Important:** Keep `runtime: docker` in `render.yaml`. Switching an existing service to native Node runtime can break deploys.
 
 ---
 
 ## Key User Flows
 
-1. **Landing** → Beautiful marketing page explaining the mission.
-2. **Login** → Just enter email → backend returns JWT → stored in localStorage.
-3. **Dashboard** → Enter any consumer plan → AI analyzes it → shows original vs smart alternatives.
-4. **History** → All past analyses are saved and listed on the left. Click to re-open.
-5. **Sharing** → Click "Share Link" on any result → anyone with the link can view it (no login needed).
-6. **Delete** → Only the owner (via JWT) can delete their own history items.
+1. **Landing** — Mission page with feature overview
+2. **Login** — Enter email → receive JWT → stored in localStorage
+3. **Dashboard** — Submit a consumer plan → AI returns structured alternatives
+4. **History** — Past analyses listed in sidebar; click to re-open
+5. **Share** — Copy link to any saved result; viewable without login
+6. **Delete** — Owner-only, enforced by JWT + backend ownership check
 
 ---
 
-## How to Run (Quick)
+## API Endpoints
 
-See the full checklist above. Basic commands:
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/health` | No | Health check + environment info |
+| `POST` | `/api/auth/login` | No | Email login → JWT |
+| `POST` | `/api/optimize` | Optional | AI optimization (+ save if email/token present) |
+| `GET` | `/api/history` | Yes | User's history list |
+| `GET` | `/api/history/:id` | No | Public share view |
+| `DELETE` | `/api/history/:id` | Yes | Delete own history item |
 
-```bash
-# Terminal 1 - Backend
-cd smartswap/backend
-npm install
-node server.js
+---
 
-# Terminal 2 - Frontend
-cd smartswap/frontend
-npm install
-npm run dev
-```
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GEMINI_API_KEY` | Yes (prod) | Google Gemini API key |
+| `JWT_SECRET` | Yes (prod) | Signs JWT tokens — use 32+ random chars |
+| `MONGODB_URI` | No | MongoDB Atlas connection string |
+| `PORT` | No | Default `5000` (Render sets this automatically) |
+| `FRONTEND_ORIGIN` | No | Extra CORS origin for split frontend/API hosting |
+| `NODE_ENV` | No | `development` locally, `production` on Render |
+
+See `backend/.env.example` for a template.
+
+---
+
+## Common Issues
+
+| Problem | Fix |
+|---------|-----|
+| Port 5000 in use | Kill old node processes or change `PORT` in `.env` |
+| `Unexpected token '<'` | Backend not running on 5000, or wrong server responding |
+| CORS errors on Render | Ensure same-origin deploy (one service serves both); check `RENDER_EXTERNAL_URL` is allowed |
+| AI returns demo/fallback data | Gemini key invalid or quota exhausted — check Render env vars |
+| Deploy fails after runtime change | Revert to `runtime: docker` in `render.yaml` and redeploy |
+
+---
+
+## Documentation
+
+| File | Contents |
+|------|----------|
+| [SETUP.md](./SETUP.md) | Step-by-step local setup checklist |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Data flow, diagrams, design decisions |
+| [SECURITY.md](./SECURITY.md) | Auth model, CORS, rate limits, production guidance |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute, test requirements, PR checklist |
 
 ---
 
 ## Why This Is a Strong Full-Stack Example
 
-SmartSwap demonstrates many real-world full-stack concerns in one coherent application:
+SmartSwap demonstrates real-world concerns in one coherent application:
 
-- **Authentication & Authorization** (JWT + ownership checks)
-- **AI Integration** with strict output contracts
-- **Graceful Degradation** (DB + error handling)
-- **Security Best Practices** (headers, rate limits, CORS, token validation)
-- **Public vs Private Data** patterns
-- **Modern Frontend Architecture** (SPA + client-side routing)
-- **Observability** (request logging)
-- **Developer Experience** (easy local run, no mandatory external services)
-
-It was also deliberately hardened with a proper security layer while keeping the experience extremely smooth (one-field login).
+- Authentication & authorization (JWT + ownership)
+- AI integration with strict output contracts and graceful fallback
+- Resilient data layer (cloud DB + local file fallback)
+- Security (Helmet, rate limits, CORS, compression, env validation)
+- Public vs private data patterns
+- Modular frontend with lazy loading and accessibility
+- Automated testing (API, unit, component, axe a11y) + CI pipeline
+- Production deployment (Docker, Render, health checks)
 
 ---
 
-## Notes
-
-- The AI is instructed to prioritize **cost savings** first. Carbon reduction is treated as a hidden benefit.
-- All styling is inline on purpose — this keeps the focus on architecture and logic rather than CSS complexity.
-- The project was actively improved with real JWT auth, defensive programming, and production middleware during development.
-
----
-
-**SmartSwap** shows how to build a useful, secure, AI-powered full-stack application that feels modern and thoughtful — both for the end user and for the developer.
-
-For deeper technical details (including diagrams), see:
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [CONTRIBUTING.md](./CONTRIBUTING.md)
+**SmartSwap** — intercept decisions at the source, before the spend.
