@@ -13,14 +13,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+const hasBuiltFrontend = fs.existsSync(frontendDist);
 
 if (isProduction) {
     if (!process.env.JWT_SECRET) {
-        console.error('JWT_SECRET is required in production. Set it in your hosting environment variables.');
+        console.error('FATAL: JWT_SECRET is required in production. Add it in Render → Environment.');
         process.exit(1);
     }
     if (!process.env.GEMINI_API_KEY?.trim()) {
-        console.error('GEMINI_API_KEY is required in production.');
+        console.error('FATAL: GEMINI_API_KEY is required in production. Add it in Render → Environment.');
         process.exit(1);
     }
 }
@@ -490,6 +491,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok',
         environment: isProduction ? 'production' : 'development',
         database: dbConnected ? 'mongodb' : 'local-file',
+        frontend: hasBuiltFrontend ? 'built' : 'missing',
         timestamp: new Date().toISOString()
     });
 });
@@ -623,7 +625,7 @@ app.delete('/api/history/:id', authenticateToken, async (req, res) => {
     }
 });
 
-if (isProduction && fs.existsSync(frontendDist)) {
+if (hasBuiltFrontend) {
     app.use(express.static(frontendDist, { index: false }));
     app.get(/^(?!\/api\/).*/, (req, res) => {
         res.sendFile(path.join(frontendDist, 'index.html'));
@@ -638,5 +640,6 @@ app.listen(PORT, () => {
     const key = process.env.GEMINI_API_KEY || '';
     const keyHint = key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '(missing)';
     console.log(`SmartSwap Backend operating seamlessly on port ${PORT}`);
+    console.log(`Environment: ${isProduction ? 'production' : 'development'} | frontend build: ${hasBuiltFrontend ? 'found' : 'missing'}`);
     console.log(`Gemini API key loaded: ${keyHint} | models: ${GEMINI_MODELS.join(', ')}`);
 });
