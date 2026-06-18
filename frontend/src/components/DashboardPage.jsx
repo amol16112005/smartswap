@@ -231,7 +231,7 @@ export function DashboardPage({ auth }) {
             </div>
           </form>
           {offlineNotice && (
-            <div role="status" aria-live="polite" style={{ color: '#92400e', marginTop: '12px', fontSize: '14px', background: '#fffbeb', padding: '12px 14px', borderRadius: '8px', border: '1px solid #fde68a' }}>
+            <div role="status" aria-live="polite" style={{ color: '#1e40af', marginTop: '12px', fontSize: '14px', background: '#eff6ff', padding: '12px 14px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
               <strong style={{ display: 'block', marginBottom: '4px' }}>Site is working — demo mode active</strong>
               {offlineNotice}
             </div>

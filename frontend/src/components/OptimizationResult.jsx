@@ -26,8 +26,8 @@ export function OptimizationResult({
           <div style={{ fontSize: '24px', fontWeight: '800', color: '#1e293b' }}>₹{result.userOriginalWay?.costINR?.toLocaleString('en-IN')}</div>
           <p style={{ fontSize: '13px', color: '#64748b', marginTop: '10px' }}>{result.userOriginalWay?.qualityMetric}</p>
           {result.userOriginalWay?.softSuggestion && (
-            <p role="note" style={{ fontSize: '12px', color: '#b45309', background: '#fffbeb', padding: '8px', borderRadius: '6px', margin: '10px 0 0 0' }}>
-              <strong>Warning:</strong> {result.userOriginalWay.softSuggestion}
+            <p role="note" style={{ fontSize: '12px', color: '#475569', background: '#f8fafc', padding: '8px', borderRadius: '6px', margin: '10px 0 0 0', border: '1px solid #e2e8f0' }}>
+              <strong>Tip:</strong> {result.userOriginalWay.softSuggestion}
             </p>
           )}
         </div>
