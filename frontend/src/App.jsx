@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, Sparkles, TrendingDown, RefreshCw, Zap, Shield, History, User, LogIn, LogOut, ChevronRight, Share2, Trash2, Check } from 'lucide-react';
 import { apiUrl } from './config';
@@ -11,7 +11,7 @@ function LandingPage() {
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '60px 20px', textAlign: 'center' }}>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#e2f5ea', color: '#15803d', padding: '8px 18px', borderRadius: '30px', fontWeight: '600', fontSize: '13px', marginBottom: '24px' }}>
-        <Sparkles size={14} /> Redefining Sustainable Consumer Choices
+        <Sparkles size={14} aria-hidden="true" /> Redefining Sustainable Consumer Choices
       </div>
       <h1 style={{ fontSize: '52px', fontWeight: '900', letterSpacing: '-1px', margin: '0 0 16px 0', lineHeight: '1.1' }}>
         Smart<span style={{ color: '#16a34a' }}>Swap</span>
@@ -21,8 +21,8 @@ function LandingPage() {
       </p>
 
       <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginBottom: '60px' }}>
-        <button onClick={() => navigate('/login')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '16px 36px', borderRadius: '12px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 10px 20px -4px rgba(22,163,74,0.3)' }}>
-          Access Your Personal Space <ArrowRight size={18} />
+        <button type="button" onClick={() => navigate('/login')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '16px 36px', borderRadius: '12px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 10px 20px -4px rgba(22,163,74,0.3)' }}>
+          Access Your Personal Space <ArrowRight size={18} aria-hidden="true" />
         </button>
       </div>
 
@@ -98,31 +98,37 @@ function LoginPage({ onLogin }) {
   return (
     <div style={{ maxWidth: '420px', margin: '80px auto', padding: '40px 30px', background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.05)' }}>
       <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-        <div style={{ display: 'inline-flex', padding: '12px', background: '#f0fdf4', color: '#16a34a', borderRadius: '50%', marginBottom: '14px' }}><Shield size={28} /></div>
+        <div style={{ display: 'inline-flex', padding: '12px', background: '#f0fdf4', color: '#16a34a', borderRadius: '50%', marginBottom: '14px' }}><Shield size={28} aria-hidden="true" /></div>
         <h2 style={{ margin: '0 0 6px 0', fontSize: '24px', fontWeight: '800' }}>Secure Space Login</h2>
         <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Enter your email for a secure private session.</p>
       </div>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Identity Email Address</label>
+          <label htmlFor="login-email" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Identity Email Address</label>
           <input 
+            id="login-email"
+            name="email"
             type="email" 
+            autoComplete="email"
             required 
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
             placeholder="e.g., engineer@university.edu" 
             style={{ width: '100%', boxSizing: 'border-box', padding: '12px 16px', borderRadius: '10px', border: '2px solid #e2e8f0', fontSize: '15px', outline: 'none' }} 
             disabled={loggingIn}
+            aria-invalid={!!loginError}
+            aria-describedby={loginError ? 'login-error' : undefined}
           />
         </div>
         <button 
           type="submit" 
-          disabled={loggingIn} 
+          disabled={loggingIn}
+          aria-busy={loggingIn}
           style={{ width: '100%', background: '#0f172a', color: '#fff', border: 'none', padding: '14px', borderRadius: '10px', fontSize: '15px', fontWeight: '600', cursor: loggingIn ? 'default' : 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '10px', opacity: loggingIn ? 0.7 : 1 }}
         >
-          {loggingIn ? 'Securing Session...' : <>Authenticate Identity <LogIn size={16} /></>}
+          {loggingIn ? 'Securing Session...' : <>Authenticate Identity <LogIn size={16} aria-hidden="true" /></>}
         </button>
-        {loginError && <p style={{ color: '#dc2626', fontSize: '13px', marginTop: '4px' }}>{loginError}</p>}
+        {loginError && <p id="login-error" role="alert" aria-live="polite" style={{ color: '#dc2626', fontSize: '13px', marginTop: '4px' }}>{loginError}</p>}
       </form>
       <p style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', marginTop: '16px' }}>
         Your data is protected with secure tokens. No passwords stored.
@@ -290,7 +296,7 @@ function DashboardPage({ auth }) {
     <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '30px', minHeight: 'calc(100vh - 120px)' }}>
 
       {/* Left Column Profile & Interactive History Vault */}
-      <aside style={{ background: '#ffffff', padding: '24px', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '24px', maxHeight: '80vh', overflowY: 'auto' }}>
+      <aside aria-label="Profile and history" style={{ background: '#ffffff', padding: '24px', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '24px', maxHeight: '80vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '16px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ background: '#e2f5ea', color: '#16a34a', padding: '10px', borderRadius: '12px' }}><User size={20} /></div>
           <div style={{ overflow: 'hidden' }}>
@@ -301,11 +307,11 @@ function DashboardPage({ auth }) {
 
         <div>
           <h3 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.5px', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <History size={14} /> Click Logs to Re-open
+            <History size={14} aria-hidden="true" /> Click Logs to Re-open
           </h3>
           {loadingHistory ? (
-            <div style={{ textAlign: 'center', color: '#64748b', padding: '20px 0', fontSize: '13px' }}>
-              <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px auto', display: 'block' }} />
+            <div role="status" aria-live="polite" aria-busy="true" style={{ textAlign: 'center', color: '#64748b', padding: '20px 0', fontSize: '13px' }}>
+              <RefreshCw size={16} aria-hidden="true" style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px auto', display: 'block' }} />
               Loading history...
             </div>
           ) : history.length === 0 ? (
@@ -313,13 +319,17 @@ function DashboardPage({ auth }) {
               No history found.<br/>Optimize a plan to start logging!
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} role="list">
               {history.map((item, idx) => {
                 const isActive = activeHistoryIndex === idx;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={item._id || idx}
+                    role="listitem"
                     onClick={() => handleSelectHistoryItem(item, idx)}
+                    aria-pressed={isActive}
+                    aria-label={`Open history log: ${item.query}`}
                     style={{
                       background: isActive ? '#f0fdf4' : '#f8fafc',
                       padding: '14px',
@@ -328,7 +338,9 @@ function DashboardPage({ auth }) {
                       fontSize: '12.5px',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      position: 'relative'
+                      position: 'relative',
+                      textAlign: 'left',
+                      width: '100%'
                     }}
                   >
                     <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '600', display: 'block', marginBottom: '4px' }}>
@@ -336,9 +348,9 @@ function DashboardPage({ auth }) {
                     </span>
                     <strong style={{ color: '#334155', display: 'block', marginBottom: '4px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', paddingRight: '20px' }}>{item.query}</strong>
                     <span style={{ color: '#16a34a', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
-                      Open Analysis <ChevronRight size={12} />
+                      Open Analysis <ChevronRight size={12} aria-hidden="true" />
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -347,24 +359,24 @@ function DashboardPage({ auth }) {
       </aside>
 
       {/* Right Column Core Optimization Desk */}
-      <main>
-        <section style={{ background: '#ffffff', padding: '30px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', marginBottom: '30px' }}>
+      <div aria-label="Optimization workspace">
+        <section aria-labelledby="optimize-heading" style={{ background: '#ffffff', padding: '30px', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', marginBottom: '30px' }}>
           <form onSubmit={handleOptimize}>
-            <label style={{ display: 'block', fontWeight: '600', marginBottom: '12px', fontSize: '16px', color: '#1e293b' }}>Initiate Procurement Swap Evaluation</label>
+            <label id="optimize-heading" htmlFor="user-plan-input" style={{ display: 'block', fontWeight: '600', marginBottom: '12px', fontSize: '16px', color: '#1e293b' }}>Initiate Procurement Swap Evaluation</label>
             <div style={{ display: 'flex', gap: '12px' }}>
-              <input type="text" value={userPlan} onChange={(e) => setUserPlan(e.target.value)} placeholder="Describe physical event, transport, or raw sourcing layout..." style={{ flex: 1, padding: '14px 18px', borderRadius: '10px', border: '2px solid #e2e8f0', fontSize: '15px', outline: 'none' }} disabled={loading} />
-              <button type="submit" disabled={loading} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '0 24px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {loading ? <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <>Evaluate <ArrowRight size={16} /></>}
+              <input id="user-plan-input" name="userPlan" type="text" value={userPlan} onChange={(e) => setUserPlan(e.target.value)} placeholder="Describe physical event, transport, or raw sourcing layout..." style={{ flex: 1, padding: '14px 18px', borderRadius: '10px', border: '2px solid #e2e8f0', fontSize: '15px', outline: 'none' }} disabled={loading} aria-describedby={error ? 'optimize-error' : undefined} aria-invalid={!!error} />
+              <button type="submit" disabled={loading} aria-busy={loading} aria-label={loading ? 'Evaluating procurement plan' : 'Evaluate procurement plan'} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '0 24px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {loading ? <RefreshCw size={16} aria-hidden="true" style={{ animation: 'spin 1s linear infinite' }} /> : <>Evaluate <ArrowRight size={16} aria-hidden="true" /></>}
               </button>
             </div>
           </form>
           {offlineNotice && (
-            <div style={{ color: '#92400e', marginTop: '12px', fontSize: '14px', background: '#fffbeb', padding: '12px 14px', borderRadius: '8px', border: '1px solid #fde68a' }}>
-              <strong style={{ display: 'block', marginBottom: '4px' }}>✓ Site is working — demo mode active</strong>
+            <div role="status" aria-live="polite" style={{ color: '#92400e', marginTop: '12px', fontSize: '14px', background: '#fffbeb', padding: '12px 14px', borderRadius: '8px', border: '1px solid #fde68a' }}>
+              <strong style={{ display: 'block', marginBottom: '4px' }}>Site is working — demo mode active</strong>
               {offlineNotice}
             </div>
           )}
-          {error && <p style={{ color: '#dc2626', marginTop: '12px', fontSize: '14px' }}>⚠️ {error}</p>}
+          {error && <p id="optimize-error" role="alert" aria-live="polite" style={{ color: '#dc2626', marginTop: '12px', fontSize: '14px' }}>{error}</p>}
         </section>
 
         {/* Dynamic Display for Live Evaluation Outputs */}
@@ -383,7 +395,9 @@ function DashboardPage({ auth }) {
                 {activeHistoryIndex !== null && history[activeHistoryIndex] && (
                   <>
                     <button
+                      type="button"
                       onClick={() => handleCopyShareLink(history[activeHistoryIndex]._id)}
+                      aria-label="Copy share link for this evaluation"
                       style={{ background: '#f1f5f9', border: 'none', color: '#475569', padding: '8px 14px', borderRadius: '8px', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
                       onMouseEnter={(e) => e.target.style.background = '#e2e8f0'}
                       onMouseLeave={(e) => e.target.style.background = '#f1f5f9'}
@@ -400,7 +414,9 @@ function DashboardPage({ auth }) {
                     </button>
                     
                     <button
+                      type="button"
                       onClick={() => handleDeleteHistoryItem(history[activeHistoryIndex]._id)}
+                      aria-label="Delete this history log"
                       style={{ background: '#fee2e2', border: 'none', color: '#dc2626', padding: '8px 14px', borderRadius: '8px', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
                       onMouseEnter={(e) => e.target.style.background = '#fecaca'}
                       onMouseLeave={(e) => e.target.style.background = '#fee2e2'}
@@ -456,7 +472,7 @@ function DashboardPage({ auth }) {
             </div>
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }
@@ -490,8 +506,8 @@ function SharedSwapPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column', gap: '16px' }}>
-        <RefreshCw size={32} style={{ animation: 'spin 1s linear infinite', color: '#16a34a' }} />
+      <div role="status" aria-live="polite" aria-busy="true" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', flexDirection: 'column', gap: '16px' }}>
+        <RefreshCw size={32} aria-hidden="true" style={{ animation: 'spin 1s linear infinite', color: '#16a34a' }} />
         <p style={{ color: '#64748b', fontWeight: '500' }}>Synchronizing swap configurations...</p>
       </div>
     );
@@ -503,7 +519,7 @@ function SharedSwapPage() {
         <div style={{ color: '#dc2626', marginBottom: '16px' }}><Shield size={48} style={{ opacity: 0.5 }} /></div>
         <h2 style={{ fontSize: '24px', fontWeight: '800', margin: '0 0 10px 0' }}>Report Unavailable</h2>
         <p style={{ color: '#64748b', marginBottom: '24px' }}>{error}</p>
-        <button onClick={() => navigate('/')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>
+        <button type="button" onClick={() => navigate('/')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>
           Go to Home Hub
         </button>
       </div>
@@ -567,7 +583,7 @@ function SharedSwapPage() {
 
       <div style={{ textAlign: 'center', borderTop: '1px solid #e2e8f0', paddingTop: '30px' }}>
         <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '16px' }}>Want to evaluate another supply chain choice or carbon plan?</p>
-        <button onClick={() => navigate('/')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '14px 28px', borderRadius: '10px', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
+        <button type="button" onClick={() => navigate('/')} style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '14px 28px', borderRadius: '10px', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
           Evaluate Your Own Plan with SmartSwap
         </button>
       </div>
@@ -617,8 +633,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <InnerNavbar auth={auth} onLogout={handleLogout} />
-      <div style={{ padding: '0 40px', backgroundColor: '#f8fafc', minHeight: 'calc(100vh - 110px)', paddingTop: '20px' }}>
+      <main id="main-content" style={{ padding: '0 40px', backgroundColor: '#f8fafc', minHeight: 'calc(100vh - 110px)', paddingTop: '20px' }}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
@@ -628,7 +645,7 @@ export default function App() {
           />
           <Route path="/share/:id" element={<SharedSwapPage />} />
         </Routes>
-      </div>
+      </main>
     </BrowserRouter>
   );
 }
@@ -637,8 +654,8 @@ export default function App() {
 function InnerNavbar({ auth, onLogout }) {
   const navigate = useNavigate();
   return (
-    <nav style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '16px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <Link to="/" style={{ textDecoration: 'none', fontSize: '22px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <nav aria-label="Primary" style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '16px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Link to="/" aria-label="SmartSwap home" style={{ textDecoration: 'none', fontSize: '22px', fontWeight: '800', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
         Smart<span style={{ color: '#16a34a' }}>Swap</span>
       </Link>
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -647,7 +664,9 @@ function InnerNavbar({ auth, onLogout }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <Link to="/dashboard" style={{ textDecoration: 'none', background: '#e2f5ea', color: '#15803d', padding: '8px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600' }}>Dashboard Desk</Link>
             <button
+              type="button"
               onClick={() => onLogout(navigate)}
+              aria-label="Log out of your account"
               style={{ background: 'transparent', border: '1px solid #cbd5e1', color: '#64748b', padding: '8px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
               onMouseEnter={(e) => { e.target.style.color = '#dc2626'; e.target.style.borderColor = '#fca5a5'; }}
               onMouseLeave={(e) => { e.target.style.color = '#64748b'; e.target.style.borderColor = '#cbd5e1'; }}

@@ -434,6 +434,14 @@ function buildOfflineFallback(userPlan) {
 }
 
 async function generateOptimization(userPlan) {
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+        return {
+            text: JSON.stringify(buildOfflineFallback(userPlan)),
+            offlineFallback: true,
+            fallbackReason: 'GEMINI_API_KEY not configured'
+        };
+    }
+
     const maxRetriesPerModel = 2;
     const baseDelayMs = 1500;
     let lastError = null;
@@ -497,7 +505,7 @@ async function generateOptimization(userPlan) {
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
-        environment: isProduction ? 'production' : 'development',
+        environment: process.env.NODE_ENV || 'development',
         database: dbConnected ? 'mongodb' : 'local-file',
         frontend: hasBuiltFrontend ? 'built' : 'missing',
         timestamp: new Date().toISOString()
@@ -644,10 +652,14 @@ if (hasBuiltFrontend) {
     });
 }
 
-app.listen(PORT, () => {
-    const key = process.env.GEMINI_API_KEY || '';
-    const keyHint = key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '(missing)';
-    console.log(`SmartSwap Backend operating seamlessly on port ${PORT}`);
-    console.log(`Environment: ${isProduction ? 'production' : 'development'} | frontend build: ${hasBuiltFrontend ? 'found' : 'missing'}`);
-    console.log(`Gemini API key loaded: ${keyHint} | models: ${GEMINI_MODELS.join(', ')}`);
-});
+module.exports = { app };
+
+if (require.main === module) {
+    app.listen(PORT, () => {
+        const key = process.env.GEMINI_API_KEY || '';
+        const keyHint = key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '(missing)';
+        console.log(`SmartSwap Backend operating seamlessly on port ${PORT}`);
+        console.log(`Environment: ${isProduction ? 'production' : 'development'} | frontend build: ${hasBuiltFrontend ? 'found' : 'missing'}`);
+        console.log(`Gemini API key loaded: ${keyHint} | models: ${GEMINI_MODELS.join(', ')}`);
+    });
+}

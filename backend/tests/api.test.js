@@ -1,0 +1,75 @@
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = 'test-secret-for-unit-tests-only-32chars';
+process.env.GEMINI_API_KEY = '';
+process.env.MONGODB_URI = '';
+
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const request = require('supertest');
+const { app } = require('../server');
+
+describe('SmartSwap API', () => {
+  it('GET /api/health returns ok status', async () => {
+    const res = await request(app).get('/api/health').expect(200);
+    assert.equal(res.body.status, 'ok');
+    assert.equal(res.body.environment, 'test');
+    assert.ok('database' in res.body);
+    assert.ok('timestamp' in res.body);
+  });
+
+  it('POST /api/auth/login rejects invalid email', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'not-an-email' })
+      .expect(400);
+    assert.match(res.body.error, /valid email/i);
+  });
+
+  it('POST /api/auth/login returns JWT for valid email', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'tester@example.com' })
+      .expect(200);
+    assert.equal(res.body.email, 'tester@example.com');
+    assert.ok(res.body.token);
+  });
+
+  it('POST /api/optimize rejects short plans', async () => {
+    const res = await request(app)
+      .post('/api/optimize')
+      .send({ userPlan: 'ab' })
+      .expect(400);
+    assert.match(res.body.error, /min 3 characters/i);
+  });
+
+  it('POST /api/optimize returns optimization payload', async () => {
+    const res = await request(app)
+      .post('/api/optimize')
+      .send({ userPlan: 'Train trip from Mumbai to Delhi next weekend' })
+      .expect(200);
+    assert.ok(res.body.optimization);
+    assert.ok(res.body.optimization.userOriginalWay);
+    assert.ok(Array.isArray(res.body.optimization.smartAlternatives));
+  });
+
+  it('GET /api/history requires authentication', async () => {
+    const res = await request(app).get('/api/history').expect(401);
+    assert.match(res.body.error, /token required/i);
+  });
+
+  it('GET /api/history returns list for authenticated user', async () => {
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'history-user@example.com' });
+    const res = await request(app)
+      .get('/api/history')
+      .set('Authorization', `Bearer ${login.body.token}`)
+      .expect(200);
+    assert.ok(Array.isArray(res.body));
+  });
+
+  it('GET /api/history/:id returns 404 for unknown id', async () => {
+    const res = await request(app).get('/api/history/nonexistent-id-12345').expect(404);
+    assert.ok(res.body.error);
+  });
+});
