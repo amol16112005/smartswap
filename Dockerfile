@@ -1,4 +1,4 @@
-FROM node:20-alpine AS frontend-build
+FROM node:20-slim AS frontend-build
 
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -7,7 +7,7 @@ COPY frontend/ ./
 ENV VITE_API_URL=
 RUN npm run build
 
-FROM node:20-alpine AS production
+FROM node:20-slim AS production
 
 WORKDIR /app/backend
 COPY backend/package*.json ./
