@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, Sparkles, TrendingDown, RefreshCw, Zap, Shield, History, User, LogIn, LogOut, ChevronRight, Share2, Trash2, Check } from 'lucide-react';
+import { apiUrl } from './config';
 
 // ==========================================
 // 1. LANDING & MISSION PAGE
@@ -62,7 +63,7 @@ function LoginPage({ onLogin }) {
     setLoginError('');
 
     try {
-      const res = await fetch('http://localhost:5000/api/auth/login', {
+      const res = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),
@@ -156,7 +157,7 @@ function DashboardPage({ auth }) {
       if (!token) return;
       setLoadingHistory(true);
       try {
-        const response = await fetch(`http://localhost:5000/api/history`, {
+        const response = await fetch(apiUrl('/api/history'), {
           headers: { ...authHeaders }
         });
         if (response.status === 401 || response.status === 403) {
@@ -193,7 +194,7 @@ function DashboardPage({ auth }) {
     setActiveHistoryIndex(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/optimize', {
+      const response = await fetch(apiUrl('/api/optimize'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -260,7 +261,7 @@ function DashboardPage({ auth }) {
   const handleDeleteHistoryItem = async (id) => {
     if (!window.confirm('Are you sure you want to delete this history log?')) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/history/${id}`, {
+      const response = await fetch(apiUrl(`/api/history/${id}`), {
         method: 'DELETE',
         headers: { ...authHeaders }
       });
@@ -474,7 +475,7 @@ function SharedSwapPage() {
     const fetchSharedSwap = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/api/history/${id}`);
+        const response = await fetch(apiUrl(`/api/history/${id}`));
         if (!response.ok) throw new Error('Shared swap optimization not found or server is offline.');
         const data = await response.json();
         setSwapData(data);

@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/.env
+**/.env.local
+**/dist
+backend/history_db.json
+.git
+.gitignore
+terminals
+*.md
+.vscode
+.idea

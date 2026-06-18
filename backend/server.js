@@ -11,6 +11,21 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+
+if (isProduction) {
+    if (!process.env.JWT_SECRET) {
+        console.error('JWT_SECRET is required in production. Set it in your hosting environment variables.');
+        process.exit(1);
+    }
+    if (!process.env.GEMINI_API_KEY?.trim()) {
+        console.error('GEMINI_API_KEY is required in production.');
+        process.exit(1);
+    }
+}
+
+app.set('trust proxy', 1);
 
 // Initialize the official Google Gen AI client (re-read key on each call via getter)
 function getGeminiClient() {
@@ -467,6 +482,15 @@ async function generateOptimization(userPlan) {
 // API ROUTES
 // ==========================================
 
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        environment: isProduction ? 'production' : 'development',
+        database: dbConnected ? 'mongodb' : 'local-file',
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Real lightweight auth endpoint (smooth experience: just email → real JWT)
 app.post('/api/auth/login', (req, res) => {
   const { email } = req.body;
@@ -596,10 +620,16 @@ app.delete('/api/history/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// Fallback for unknown routes - always return JSON so the frontend doesn't choke on HTML
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found on backend' });
-});
+if (isProduction && fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist, { index: false }));
+    app.get(/^(?!\/api\/).*/, (req, res) => {
+        res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+} else {
+    app.use((req, res) => {
+        res.status(404).json({ error: 'Route not found on backend' });
+    });
+}
 
 app.listen(PORT, () => {
     const key = process.env.GEMINI_API_KEY || '';
