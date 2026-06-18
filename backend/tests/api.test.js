@@ -72,4 +72,43 @@ describe('SmartSwap API', () => {
     const res = await request(app).get('/api/history/nonexistent-id-12345').expect(404);
     assert.ok(res.body.error);
   });
+
+  it('POST /api/auth/login normalizes email to lowercase', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: '  Tester@Example.COM  ' })
+      .expect(200);
+    assert.equal(res.body.email, 'tester@example.com');
+  });
+
+  it('GET /api/history rejects invalid tokens', async () => {
+    const res = await request(app)
+      .get('/api/history')
+      .set('Authorization', 'Bearer invalid.token.value')
+      .expect(403);
+    assert.match(res.body.error, /invalid|expired/i);
+  });
+
+  it('POST /api/optimize saves history when email is provided', async () => {
+    const res = await request(app)
+      .post('/api/optimize')
+      .send({
+        userPlan: 'Weekend train from Mumbai to Pune',
+        email: 'saver@example.com',
+      })
+      .expect(200);
+    assert.ok(res.body.historyEntry);
+    assert.equal(res.body.historyEntry.email, 'saver@example.com');
+    assert.equal(res.body.offlineFallback, true);
+  });
+
+  it('DELETE /api/history/:id requires authentication', async () => {
+    const res = await request(app).delete('/api/history/some-id').expect(401);
+    assert.match(res.body.error, /token required/i);
+  });
+
+  it('POST /api/optimize rejects missing userPlan', async () => {
+    const res = await request(app).post('/api/optimize').send({}).expect(400);
+    assert.match(res.body.error, /required/i);
+  });
 });

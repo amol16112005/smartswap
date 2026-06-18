@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const { GoogleGenAI } = require('@google/genai');
 const mongoose = require('mongoose');
 const fs = require('fs');
@@ -7,6 +8,8 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { buildOfflineFallback } = require('./lib/offlineFallback');
+const { getAllowedOrigins, isAllowedCorsOrigin } = require('./lib/cors');
 require('dotenv').config();
 
 const app = express();
@@ -41,32 +44,14 @@ function getGeminiClient() {
 // SECURITY LAYER SETUP (intact + smooth)
 // ==========================================
 app.use(helmet()); // Secure HTTP headers
+app.use(compression());
 
-// Tightened CORS (adjust origins for your deployment)
-// Allow common Vite ports + any localhost port for dev (Vite auto-falls back to 5174/5175/etc when ports are busy)
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:4173',
-  'http://localhost:5175',
-  process.env.FRONTEND_ORIGIN,
-  process.env.RENDER_EXTERNAL_URL
-].filter(Boolean);
-
-function isAllowedCorsOrigin(origin, req) {
-  if (!origin) return true;
-  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-  if (isLocalhost || allowedOrigins.includes(origin)) return true;
-  // Same-origin deploy: backend serves the built frontend from the same host
-  const host = req?.headers?.host;
-  if (host && (origin === `https://${host}` || origin === `http://${host}`)) return true;
-  return false;
-}
+const allowedOrigins = getAllowedOrigins();
 
 app.use((req, res, next) => {
   cors({
     origin: function (origin, callback) {
-      if (isAllowedCorsOrigin(origin, req)) {
+      if (isAllowedCorsOrigin(origin, req, allowedOrigins)) {
         callback(null, true);
       } else {
         callback(new Error('CORS policy: Origin not allowed.'));
@@ -367,70 +352,6 @@ function isPerModelQuotaError(error) {
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function buildOfflineFallback(userPlan) {
-    const lower = userPlan.toLowerCase();
-    let originalCost = 5000;
-    let altCost = 3200;
-    let originalTitle = 'Your original plan';
-    let altTitle = 'Lower-cost alternative';
-    let alt2Title = 'Second-hand / local swap';
-
-    if (/trip|travel|flight|train|bus|mumbai|delhi|goa|bangalore/i.test(lower)) {
-        originalCost = 4200;
-        altCost = 2100;
-        originalTitle = 'Direct peak-time booking';
-        altTitle = 'Off-peak train / bus';
-        alt2Title = 'Carpool or shared ride';
-    } else if (/phone|laptop|tablet|gadget|amazon|flipkart|buy|order/i.test(lower)) {
-        originalCost = 28000;
-        altCost = 19500;
-        originalTitle = 'Brand-new retail purchase';
-        altTitle = 'Certified refurbished unit';
-        alt2Title = 'Exchange + refurbished deal';
-    } else if (/food|grocery|swiggy|zomato|restaurant/i.test(lower)) {
-        originalCost = 650;
-        altCost = 380;
-        originalTitle = 'Delivery from premium outlet';
-        altTitle = 'Pickup from local store';
-        alt2Title = 'Meal prep at home';
-    }
-
-    return {
-        isAlreadyOptimal: false,
-        celebrationMessage: '',
-        efficiencyStats: {
-            costRating: 'Estimated Savings',
-            carbonScore: '35% below average'
-        },
-        userOriginalWay: {
-            title: originalTitle,
-            costINR: originalCost,
-            qualityMetric: 'Familiar convenient option',
-            softSuggestion: 'Compare 2–3 sellers before you commit.'
-        },
-        smartAlternatives: [
-            {
-                badge: 'Cheapest Choice',
-                title: altTitle,
-                costINR: altCost,
-                carbonSavedPercent: 42,
-                qualityAssurance: 'Same outcome less spend',
-                actionButtonText: 'Explore option',
-                actionLink: `https://www.google.com/search?q=${encodeURIComponent(userPlan)}`
-            },
-            {
-                badge: 'Eco Bonus',
-                title: alt2Title,
-                costINR: Math.round(altCost * 0.72),
-                carbonSavedPercent: 68,
-                qualityAssurance: 'Lower footprint same need',
-                actionButtonText: 'Browse listings',
-                actionLink: 'https://www.olx.in'
-            }
-        ]
-    };
 }
 
 async function generateOptimization(userPlan) {

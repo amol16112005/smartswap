@@ -8,6 +8,7 @@
     "build": "npm run build --prefix frontend",
     "start": "cross-env NODE_ENV=production node backend/server.js",
     "test": "npm test --prefix backend && npm test --prefix frontend",
+    "test:ci": "npm test --prefix backend && npm test --prefix frontend && npm run build --prefix frontend",
     "test:backend": "npm test --prefix backend",
     "test:frontend": "npm test --prefix frontend",
     "dev:backend": "npm run dev --prefix backend",
