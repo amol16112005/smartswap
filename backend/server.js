@@ -49,24 +49,32 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:4173',
   'http://localhost:5175',
-  process.env.FRONTEND_ORIGIN
+  process.env.FRONTEND_ORIGIN,
+  process.env.RENDER_EXTERNAL_URL
 ].filter(Boolean);
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) {
-      return callback(null, true);
-    }
-    // Support any localhost or 127.0.0.1 port during development
-    const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-    if (isLocalhost || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS policy: Origin not allowed.'));
-    }
-  },
-  credentials: true
-}));
+function isAllowedCorsOrigin(origin, req) {
+  if (!origin) return true;
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  if (isLocalhost || allowedOrigins.includes(origin)) return true;
+  // Same-origin deploy: backend serves the built frontend from the same host
+  const host = req?.headers?.host;
+  if (host && (origin === `https://${host}` || origin === `http://${host}`)) return true;
+  return false;
+}
+
+app.use((req, res, next) => {
+  cors({
+    origin: function (origin, callback) {
+      if (isAllowedCorsOrigin(origin, req)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS policy: Origin not allowed.'));
+      }
+    },
+    credentials: true
+  })(req, res, next);
+});
 
 app.use(express.json({ limit: '1mb' })); // Reasonable body size limit
 
