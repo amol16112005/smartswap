@@ -111,4 +111,21 @@ describe('SmartSwap API', () => {
     const res = await request(app).post('/api/optimize').send({}).expect(400);
     assert.match(res.body.error, /required/i);
   });
+
+  it('POST /api/optimize serves cached response for identical plans', async () => {
+    const plan = 'Cached query: bus from Chennai to Bangalore';
+    const first = await request(app)
+      .post('/api/optimize')
+      .send({ userPlan: plan })
+      .expect(200);
+    assert.equal(first.headers['x-cache'], 'MISS');
+
+    const second = await request(app)
+      .post('/api/optimize')
+      .send({ userPlan: `  ${plan.toUpperCase()}  ` })
+      .expect(200);
+    assert.equal(second.headers['x-cache'], 'HIT');
+    assert.equal(second.body.cached, true);
+    assert.deepEqual(second.body.optimization, first.body.optimization);
+  });
 });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowRight, RefreshCw, History, User, ChevronRight, Share2, Trash2, Check } from 'lucide-react';
 import { apiUrl } from '../config';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -17,10 +17,13 @@ export function DashboardPage({ auth }) {
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const optimizeAbortRef = useRef(null);
 
   useDocumentTitle('Dashboard — SmartSwap');
 
   const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
+  useEffect(() => () => optimizeAbortRef.current?.abort(), []);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -52,9 +55,13 @@ export function DashboardPage({ auth }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const handleOptimize = async (e) => {
+  const handleOptimize = useCallback(async (e) => {
     e.preventDefault();
-    if (!userPlan.trim()) return;
+    if (!userPlan.trim() || loading) return;
+
+    optimizeAbortRef.current?.abort();
+    const controller = new AbortController();
+    optimizeAbortRef.current = controller;
 
     setLoading(true);
     setError('');
@@ -70,6 +77,7 @@ export function DashboardPage({ auth }) {
           ...authHeaders,
         },
         body: JSON.stringify({ userPlan }),
+        signal: controller.signal,
       });
       if (!response.ok) {
         const txt = await response.text().catch(() => '');
@@ -107,11 +115,14 @@ export function DashboardPage({ auth }) {
         setActiveHistoryIndex(0);
       }
     } catch (err) {
+      if (err.name === 'AbortError') return;
       setError(err.message || 'Error executing optimization call.');
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
-  };
+  }, [userPlan, loading, token, authHeaders]);
 
   const handleSelectHistoryItem = (item, idx) => {
     setActiveHistoryIndex(idx);
