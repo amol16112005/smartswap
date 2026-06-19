@@ -1,5 +1,6 @@
 const express = require('express');
 const { resolveEmailFromRequest } = require('../lib/auth');
+const { validateUserPlan } = require('../lib/validate');
 const { generateOptimization, isRetryableGeminiError } = require('../lib/gemini');
 const { saveHistoryEntry } = require('../lib/database');
 const { optimizeLimiter } = require('../lib/middleware');
@@ -8,14 +9,13 @@ const router = express.Router();
 
 router.post('/', optimizeLimiter, async (req, res) => {
     try {
-        const { userPlan } = req.body;
-
-        if (!userPlan || typeof userPlan !== 'string' || userPlan.trim().length < 3) {
+        const normalizedPlan = validateUserPlan(req.body?.userPlan);
+        if (!normalizedPlan) {
             return res.status(400).json({ error: 'User plan is required (min 3 characters).' });
         }
 
         const effectiveEmail = resolveEmailFromRequest(req);
-        const response = await generateOptimization(userPlan);
+        const response = await generateOptimization(normalizedPlan);
         const optimizationData = JSON.parse(response.text);
 
         let savedEntry = null;
@@ -26,7 +26,7 @@ router.post('/', optimizeLimiter, async (req, res) => {
 
             savedEntry = await saveHistoryEntry({
                 email: effectiveEmail,
-                query: userPlan,
+                query: normalizedPlan,
                 resolution,
                 data: optimizationData
             });

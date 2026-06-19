@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, LogIn } from 'lucide-react';
-import { apiUrl } from '../config';
+import { apiFetch } from '../lib/apiClient';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 export function LoginPage({ onLogin }) {
@@ -19,26 +19,10 @@ export function LoginPage({ onLogin }) {
     setLoginError('');
 
     try {
-      const res = await fetch(apiUrl('/api/auth/login'), {
+      const { data } = await apiFetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
+        body: { email: email.trim() },
       });
-
-      let data;
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        const text = await res.text().catch(() => '');
-        throw new Error(
-          `Backend did not return JSON (got HTML/text instead). ` +
-          `Is the Express server actually running on port 5000? ` +
-          `Response started with: ${text.substring(0, 120)}`
-        );
-      }
-
-      if (!res.ok) throw new Error(data.error || 'Login failed');
 
       onLogin({ email: data.email, token: data.token });
       navigate('/dashboard');

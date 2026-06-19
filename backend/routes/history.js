@@ -12,6 +12,7 @@ const router = express.Router();
 router.get('/', historyLimiter, authenticateToken, async (req, res) => {
     try {
         const historyList = await getHistoryByEmail(req.user.email);
+        res.set('Cache-Control', 'private, max-age=30');
         res.json(historyList);
     } catch (error) {
         console.error('Fetch History Error:', error);

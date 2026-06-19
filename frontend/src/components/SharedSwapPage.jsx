@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { RefreshCw, Shield, Sparkles } from 'lucide-react';
-import { apiUrl } from '../config';
+import { apiFetch } from '../lib/apiClient';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { OptimizationResult } from './OptimizationResult';
 
@@ -18,9 +18,7 @@ export function SharedSwapPage() {
     const fetchSharedSwap = async () => {
       try {
         setLoading(true);
-        const response = await fetch(apiUrl(`/api/history/${id}`));
-        if (!response.ok) throw new Error('Shared swap optimization not found or server is offline.');
-        const data = await response.json();
+        const { data } = await apiFetch(`/api/history/${id}`);
         setSwapData(data);
       } catch (err) {
         setError(err.message);

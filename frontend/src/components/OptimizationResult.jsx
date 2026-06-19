@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { ChevronRight } from 'lucide-react';
 
-export function OptimizationResult({
+export const OptimizationResult = memo(function OptimizationResult({
   result,
   celebrationFallback = 'Your plan is already the most optimized choice!',
   gridStyle = {},
@@ -33,8 +34,11 @@ export function OptimizationResult({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {result.smartAlternatives?.map((alt, i) => (
-            <div key={i} style={{ background: '#fff', border: '2px solid #e2e8f0', padding: '20px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {result.smartAlternatives?.map((alt) => (
+            <div
+              key={`${alt.title}-${alt.costINR}`}
+              style={{ background: '#fff', border: '2px solid #e2e8f0', padding: '20px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            >
               <div style={{ flex: 1 }}>
                 <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: '700' }}>{alt.badge}</span>
                 <h5 style={{ margin: '6px 0 2px 0', fontSize: '16px', fontWeight: '700' }}>{alt.title}</h5>
@@ -68,4 +72,4 @@ export function OptimizationResult({
       </div>
     </>
   );
-}
+});
