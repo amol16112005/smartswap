@@ -50,8 +50,8 @@ GEMINI_API_KEY=your_actual_key_here
 # Recommended before sharing or deploying
 # JWT_SECRET=a-long-random-string-at-least-32-characters
 
-# Optional — MongoDB Atlas
-# MONGODB_URI=<paste-your-atlas-connection-string-here>
+# Optional — MongoDB Atlas (paste connection string from Atlas dashboard)
+# MONGODB_URI=
 
 PORT=5000
 ```
